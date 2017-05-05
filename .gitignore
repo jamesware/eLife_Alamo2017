@@ -6,11 +6,16 @@
 *.DS_Store
 
 R/data-raw/*
-R/data-out/*
 !R/data-raw/.keep
 !R/data-raw/exac
+
+R/data-out/*
 !R/data-out/.keep
 
+R/fig/*
+!R/fig/.keep
 
-analysis/*.docx
-!analysis/templateLandscape.docx
+R/analysis/*.docx
+R/analysis/analysis_cache
+R/analysis/analysis_files
+!R/analysis/templateLandscape.docx
