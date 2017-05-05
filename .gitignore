@@ -2,3 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
+
+./R/data-raw/*
+./R/data-out/*
+!./R/data-raw/.keep
+!./R/data-out/.keep
