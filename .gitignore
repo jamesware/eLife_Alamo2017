@@ -16,6 +16,9 @@ R/fig/*
 !R/fig/.keep
 
 R/analysis/*.docx
+R/analysis/*.html
 R/analysis/analysis_cache
 R/analysis/analysis_files
 !R/analysis/templateLandscape.docx
+
+R/chargeChange/*.html
