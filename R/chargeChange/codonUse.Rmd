@@ -1,0 +1,202 @@
+---
+title: "What proportion of missense variants are charge changing?"
+author: "james ware"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(pander)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r defineFunctions, include=FALSE}
+source(file.path("..","R","annotateCharges.R"))
+```
+
+Codon definitions retrieved from:
+https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi#SG1  
+25/11/2016
+
+```{r}
+#DOWNLOAD CODON TABLE
+AAs  = "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"
+Starts = "---M------**--*----M---------------M----------------------------"
+Base1  = "TTTTTTTTTTTTTTTTCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGG"
+Base2  = "TTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGG"
+Base3  = "TCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAG"
+```
+
+```{r}
+#DEFINES ALL POSSIBLE CODONS
+codonTable=data.frame(
+  AA=strsplit(AAs,split = ""),
+  a=strsplit(Base1,split = ""),
+  b=strsplit(Base2,split = ""),
+  c=strsplit(Base3,split = "")
+)
+names(codonTable)=c("AA","b1","b2","b3")
+codonTable <- codonTable %>%
+  mutate(codon=paste(b1,b2,b3,sep=""))
+tbl_df(codonTable)
+```
+
+```{r}
+###FOR EACH CODON, DEFINES 9 POSSIBLE CODONS RESULTING FROM A SINGLE AA SUBSTITUTION
+
+# The following function will annotated each codon (64) with every possible substitution (9)
+# could also run with a different codon table
+
+findPossibleSubstitutions <- function(x=codonTable){  
+  # First, for each codon, build a regexp that identifies the 9 possible destination codons resulting from a single base change
+  toFind <- x %>%
+    transmute(search1=paste("[^",b1,"]",b2,b3,sep=""),
+              search2=paste(b1,"[^",b2,"]",b3,sep=""),
+              search3=paste(b1,b2,"[^",b3,"]",sep=""))
+  
+  # initialise an output matrix
+  allSubstitutions<-data.frame(matrix(ncol=2,nrow=0))
+  names(allSubstitutions)=c("originalCodon","substituteCodon")
+  
+  # for each row in input, find the possible destination substitutions 
+  for(i in 1:nrow(x)){
+    substitutions=c(grep(toFind[i,"search1"],codonTable$codon,value=T),
+                    grep(toFind[i,"search2"],codonTable$codon,value=T),
+                    grep(toFind[i,"search3"],codonTable$codon,value=T))
+    output=data.frame(originalCodon=x$codon[i],
+                      substituteCodon=substitutions)
+    allSubstitutions<-rbind(allSubstitutions,output)
+  }
+  return(allSubstitutions)
+}
+```
+
+```{r}
+allSubstitutions <- findPossibleSubstitutions() %>% tbl_df
+```
+
+```{r}
+#ANNOTATES WITH INITIAL AND RESULTING AA
+allSubstitutions <- allSubstitutions %>%
+  left_join(select(codonTable,codon,refAA=AA),by=c("originalCodon"="codon")) %>%
+  left_join(select(codonTable,codon,altAA=AA),by=c("substituteCodon"="codon")) %>%
+  mutate(consequence=NA)
+tbl_df(allSubstitutions)
+```
+
+```{r}
+#ANNOTATES WITH CONSEQUENCE (SYNON, NONSYNON, STOPGAIN, STOPLOSS)
+allSubstitutions$consequence[allSubstitutions$refAA==allSubstitutions$altAA] <- "SYN"
+allSubstitutions$consequence[allSubstitutions$refAA!=allSubstitutions$altAA] <- "MIS"
+allSubstitutions$consequence[allSubstitutions$refAA=="*" & allSubstitutions$altAA!="*"] <- "STOPLOSS"
+allSubstitutions$consequence[allSubstitutions$refAA!="*" & allSubstitutions$altAA=="*"] <- "STOPGAIN"
+```
+
+Define charges according to same source as Raul.
+[http://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/charge/](http://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/charge/)  
+
+```{r}
+aaTable <- defineAATable()
+```
+
+```{r}
+#annotate allSubstitutions with charges
+allSubstitutions <- allSubstitutions %>%
+  annotateCharges
+```
+
+```{r}
+allSubstitutions %>%
+  data.frame %>%
+  head
+```
+
+Considering 64 codons, each with 9 possible single nucleotide substitutions (3 changes at each of 3 positions), there are 576 possible SNV events.
+
+Tabulating these by consequence:
+
+```{r}
+#SUMMARISE
+allSubstitutions %>%
+  group_by(consequence) %>%
+  summarise(n=n()) %>%
+  pander::pander()
+```
+
+Considering only missense, and tabulating by whether they are charge changing:
+
+```{r}
+#SUMMARISE
+allSubstitutions %>%
+  filter(consequence=="MIS") %>%
+  group_by(deltaQ) %>%
+  summarise(n=n()) %>%
+  pander
+```
+
+So, 
+`r a<-allSubstitutions %>% filter(consequence=="MIS") %>% select(chargeChange) %>% unlist %>% sum ; a`/
+`r b<-allSubstitutions %>% filter(consequence=="MIS") %>% nrow ; b` 
+(`r signif(100*a/b,2)`%) possible missense-causing DNA variants would be expected to be charge changing.
+
+However, this does *not* take into account the relative abundance of each codon either in the genome, or in MYH7 coding sequence.
+
+#Myh7
+Download Myh7 cDNA sequence  
+Identify 1936 codons (1935aa, including start, plus stop)  
+```{r}
+myh7sequence <- read.table("Homo_sapiens_MYH7_001_sequence.fa.txt",
+           comment.char = ">") %>%
+  unlist %>%
+  paste(collapse="") 
+myh7sequence <- data.frame(seq=myh7sequence)
+myh7sequence
+```
+
+```{r}
+myh7codons <- myh7sequence %>%
+  tidyr::separate(col=seq,
+                  sep=seq(3,nchar(myh7sequence)-3,3),
+                  into=as.character(seq(1,nchar(myh7sequence)/3))
+                  ) %>%
+  t %>%
+  data.frame
+names(myh7codons) <- "originalCodon"
+```
+
+For each codon, determine possible substitutions & charge consequences.  
+(ignore start codon, because "missense" at this position will actually be start loss)
+```{r}
+myResults <- myh7codons %>%
+  filter(row_number()>1) %>%
+  left_join(allSubstitutions,by="originalCodon")
+tbl_df(myResults)
+```
+
+Tabulating these by consequence:
+
+```{r}
+#SUMMARISE
+myResults %>%
+  group_by(consequence) %>%
+  summarise(n=n()) %>%
+  pander::pander()
+```
+
+Considering only missense, and tabulating by whether they are charge changing:
+
+```{r}
+#SUMMARISE
+myResults %>%
+  filter(consequence=="MIS") %>%
+  group_by(deltaQ) %>%
+  summarise(n=n()) %>%
+  pander
+```
+
+So, accounting for the codon composition of the MYH7 sequence, but without weighting each codon according to its mutability, 
+`r a<-myResults %>% filter(consequence=="MIS") %>% select(chargeChange) %>% unlist %>% sum ; a`/
+`r b<-myResults %>% filter(consequence=="MIS") %>% nrow ; b` 
+(`r signif(100*a/b,2)`%) possible missense-causing DNA variants would be expected to be charge changing.
