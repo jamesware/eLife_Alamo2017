@@ -71,10 +71,10 @@ myMerge <- function(x){
 #####
 
 loadExAC <- function(){
-  a <- read.delim("../../shareAlleleFreq/data-raw/exac/Mutation_inExAC_sarcomericGenesOnly.txt") %>% tbl_df
-  b <- read.delim("../../shareAlleleFreq/data-raw/exac/GeneInfo.txt") %>% tbl_df
-  c <- read.delim("../../shareAlleleFreq/data-raw/exac/ExACPASSData.txt") %>% tbl_df
-  d <- read.delim("../../shareAlleleFreq/data-raw/exac/ExACPopulations.txt") %>% tbl_df
+  a <- read.delim("../data-raw/exac/Mutation_inExAC_sarcomericGenesOnly.txt") %>% tbl_df
+  b <- read.delim("../data-raw/exac/GeneInfo.txt") %>% tbl_df
+  c <- read.delim("../data-raw/exac/ExACPASSData.txt") %>% tbl_df
+  d <- read.delim("../data-raw/exac/ExACPopulations.txt") %>% tbl_df
   
     #retrieve all ExAC variants
     right_join(
