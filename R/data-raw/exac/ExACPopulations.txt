@@ -1,0 +1,9 @@
+ep_id	ep_code	ep_name	ep_max_alleles
+1	ALL	All populations	121412
+2	NFE	Non-Finnish European	66740
+3	AFR	African & African-American	10406
+4	EAS	East Asian	8654
+5	SAS	South Asian	16512
+6	AMR	American	11578
+7	FIN	Finnish	6614
+8	OTH	Other	908

@@ -3,7 +3,14 @@
 .RData
 .Ruserdata
 
-./R/data-raw/*
-./R/data-out/*
-!./R/data-raw/.keep
-!./R/data-out/.keep
+*.DS_Store
+
+R/data-raw/*
+R/data-out/*
+!R/data-raw/.keep
+!R/data-raw/exac
+!R/data-out/.keep
+
+
+analysis/*.docx
+!analysis/templateLandscape.docx
