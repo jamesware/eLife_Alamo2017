@@ -1,0 +1,27 @@
+---
+title: "Supplementary Info"
+author: "James Ware"
+date: "`r Sys.Date()`"
+output:
+  # html_document
+  word_document:
+    reference_docx: ./templateLandscape.docx
+---
+
+```{r setupNest, include=FALSE, cache=F}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+##Supplementary file 7
+
+**_Supplementary file 7. Leveraging regional distribution for the clinical interpretation of DCM-causing variants._** The prevalence of rare (ExAC global AF < 1x10-4) missense variants in _MYH7_ in 1315 DCM cases and ExAC controls (median number genotype per site = 33364) are compared using the binomial test. The etiological fraction, a derivative of the attributable risk percent, is computed as (OR-1)/OR, and is interpreted as the proportion of variants in cases that are causative of the disease, or the probability that a randomly selected variant (in a case).  
+
+Prevalences and odds ratios are shown for the whole myosin protein, and for pre-specified regions of interest: the head (defined in (Walsh et al., 2016)), the mesa surface & converter "sphere" region (in the pre-stroke state; (Homburger et al., 2016)), the IHM-related interactions, and the motor domain functional residues. _"RoI"_ = region of interest.  
+
+Variants at sites of IHM-priming interactions, and at MD functional sites (driven by a signal at the nucleotide binding pocket), have a probability of pathogenicity > 0.95, which is nominally sufficient for an interpretation of "likely Pathogenic", though in practice many laboratories would require a higher confidence for a clinically actionable assertion of pathogenicity.
+
+
+### S7
+```{r S7_forSupp, cache=FALSE}
+knitr::kable(tableS7,digits=50)
+```

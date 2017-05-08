@@ -2,10 +2,7 @@
 title: "IHM analysis"
 author: "james ware"
 date: "`r Sys.Date()`"
-output:
-  html_document
-  #word_document:
-  #  reference_docx: ../analyses/template.docx
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -37,7 +34,7 @@ if(!"pnas.1606950113.sd02.xlsx" %in% list.files(path = "../data-raw")){
 }
 ```
 
-Note that all statistical analyses focus on variants directly impacting MYH7 (not light chains).
+Note that all statistical analyses focus on variants directly impacting _MYH7_ (not light chains).
 
 #### Interaction definitions
 IHM interactions defined according to Alamo et al.  
@@ -288,7 +285,7 @@ hcmMis %>%
   kable
 ```
 
-## Look for enrichment of MYH7 variants in specific interaction regions and functional sites in **HCM**
+## Look for enrichment of _MYH7_ variants in specific interaction regions and functional sites in **HCM**
 
 Here we are looking at distinct dna variants.  E.g. of 40 known pathogenic DNA variants, 36 (90%) lie in a cluster in the head.  The head cluster, as defined here (aa181-937), comprises 757aa (39% of total length).  Comparisons by binomial test (since counting DNA variants, and more than one DNA can map to the same AA, so margin not fixed for Fisher).  Many of these variants are seen in multiple probands, but each distinct variant is counted once.
 
@@ -502,7 +499,7 @@ knitr::kable(tableS3e,digits=50)
 
 ```{r writeSupplementaryFile3, include=F, cache=F}
 ### Write supplementary table word doc
-#rmarkdown::render(file.path(".","tableS3.Rmd"),envir=as.environment(1))
+rmarkdown::render(file.path(".","suppFile3.Rmd"),envir=as.environment(1))
 ```
 
 ###########
@@ -667,10 +664,6 @@ myBurdenTable3[,c(1,6)] %>%
   pander
 ```
 
-```{r writeTableS6, include=F, cache=F}
-#rmarkdown::render(file.path(".","tableS6.Rmd"),envir=as.environment(1)) 
-```
-
 ### Table S6e
 This analysis confirms that controls do not display regional clustering at sites of interest.
 ```{r exacClustering}
@@ -707,6 +700,10 @@ tableS6extra <- filter(newTable,interaction!="myosinHeadCluster")
 names(tableS6extra)=myNames
 tableS6extra$interaction=myIntLabels
 knitr::kable(tableS6extra,digits=50)
+```
+
+```{r writeTableS6, include=F, cache=F}
+rmarkdown::render(file.path(".","suppFile6.Rmd"),envir=as.environment(1)) 
 ```
 
 ## Summary of findings (considering HCM alone):  
@@ -922,7 +919,7 @@ rmarkdown::render(file.path(".","suppFile7.Rmd"),envir=as.environment(1))
 ```
 
 ## Summary of findings:  
-Association of MYH7 variants with DCM is weaker, small numbers, much more modest ORs.  
+Association of _MYH7_ variants with DCM is weaker, small numbers, much more modest ORs.  
 We do still see an association with IHM formation, but this is limited to the priming interactions (specifically "f")  
 There is a robust association with MD functional sites, driven primarily by variants at the nucleotide binding sites.
 
@@ -1020,7 +1017,7 @@ pander(tableS5)
 
 ```{r writeTableS5, include=F, cache=F}
 ### Write supplementary table word doc
-#rmarkdown::render(file.path(".","tableS5.Rmd"),envir=as.environment(1)) 
+rmarkdown::render(file.path(".","suppFile5.Rmd"),envir=as.environment(1)) 
 ```
 
 
@@ -1091,7 +1088,7 @@ dcmMis %>%
   pander
 ```
 
-### Annotations for MYH7 S532P and F764L (not seen in our cohort, but discussed as illustrative)
+### Annotations for _MYH7_ S532P and F764L (not seen in our cohort, but discussed as illustrative)
 
 ```{r}
 data.frame(variant=c("S535P","F764L"),aaPos=c(535,764)) %>%

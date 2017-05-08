@@ -1,0 +1,45 @@
+---
+title: "Supplementary Info"
+author: "James Ware"
+date: "`r Sys.Date()`"
+output:
+  # html_document
+  word_document:
+    reference_docx: ./templateLandscape.docx
+---
+
+```{r setupNest, include=FALSE, cache=F}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+**Supplementary file 6. Comparison of prevalence of rare (ExAC global AF < 1x10^-4^) missense variants in _MYH7_ in 6112 HCM cases and ExAC controls** (median number genotype per site = 33364). Prevalence are compared using the binomial test. In the absence of individual-level genotypes for ExAC, the odds ratio is computed under the assumption that no individual contains more than one variant, so the number of variant carriers / non-carriers is extrapolated from the variant prevalence.  The etiological fraction, a derivative of the attributable risk percent, is computed as (OR-1)/OR, and is interpreted as the proportion of variants in cases that are causative of the disease, or the probability that a randomly selected variant (in a case) 
+
+**_Table S6a_** Prevalences and odds ratios are shown for the whole myosin protein, and for pre-specified regions of interest: the head (defined in {Walsh, 2016 #48}), the mesa surface & converter "sphere" region (in the pre-stroke state; {Homburger, 2016 #43}), the IHM-related interactions, and the motor domain functional residues. _"RoI"_ = region of interest.  p-value for all comparisons is < 1x10^-40^.
+
+```{r S6a_forSupp, cache=FALSE}
+knitr::kable(tableS6a,row.names = F,digits=50)
+```
+
+**_Table S6b_** Equivalent data is shown for all IHM interaction regions as defined in Supplementary file 2.  Prevalence at interactions f1 (bh), a (fh) and h (bh) does not differ significantly.  For other comparisons p < 1x10^-7^.
+
+```{r S6b_forSupp, cache=FALSE}
+knitr::kable(tableS6b,digits=50)
+```
+
+**_Table S6c_** Present combined data from 7 interactions with individual EF > 0.99.
+
+```{r S6c_forSupp, cache=FALSE}
+knitr::kable(tableS6c,digits=50) 
+```
+
+**_Table S6d_** Equivalent data is shown for all motor domain functional sites.  All comparisons are significant (p < 1x10^-15^.)
+
+```{r S6d_forSupp, cache=FALSE}
+knitr::kable(tableS6d,digits=50) 
+```
+
+**_Table S6e_** Variants in ExAC are not over-represented at IHM sites or MD functional sites. They are significantly depleted at MD sites, and are nominally (though not significantly) depleted for each IHM interaction type.
+
+```{r S6e_forSupp, cache=FALSE}
+knitr::kable(tableS6extra,digits=50) 
+```

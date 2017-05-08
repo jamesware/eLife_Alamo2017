@@ -1,0 +1,21 @@
+---
+title: "Supplementary Info"
+author: "James Ware"
+date: "`r Sys.Date()`"
+output:
+  # html_document
+  word_document:
+    reference_docx: ./templateLandscape.docx
+---
+
+```{r setupNest, include=FALSE, cache=F}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+##Supplementary file 5. Variants Clustered on the Myosin Mesa
+
+**_Table S5 - Assessing the enrichment of HCM and DCM-causing variants on the mesa._** The mesa is defined as the `r length(homburgerSurface %in% interactions$aaPos)` residue surface observed in the pre-stroke state, as reported in {Homburger, 2016 #43}, which represents `r signif(length(homburgerSurface %in% interactions$aaPos)/1935,2)`% of the MYH7 protein.  The proportion of HCM & DCM causing variants that fall on the mesa surface is shown, and compared with the expected proportion using the binomial test. Full variant details are shown in Tables 1-3 (in the main text).
+
+```{r S5_forSupp, cache=FALSE}
+knitr::kable(tableS5,digits=50)
+```

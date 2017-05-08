@@ -1,0 +1,41 @@
+---
+title: "Supplementary Info"
+author: "James Ware"
+date: "`r Sys.Date()`"
+output:
+  # html_document
+  word_document:
+    reference_docx: ./templateLandscape.docx
+---
+
+```{r setupNest, include=FALSE, cache=F}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+##Supplementary file 4. DCM-causing variants cluster in distinct regions of _MYH7_ from HCM-causing variants.  
+
+**_Table S4a - Assessing the distribution of DCM-causing variants across IHM and MD functional residues._** For each of the main IHM interactions (IHM forming, anchoring, stabilizing, and scaffolding) and the motor domain functional sites, the number of distinct pathogenic or likely pathogenic DCM variants (Table 3, in the main text) affecting interacting or functional residues (of a total of `r dcmMis$consensusClass %in% c("4_likelyPath","5_Pathogenic") %>% sum()` variants) is shown.
+The length of the interaction site (no of amino acid residues; total protein length = 1935) is used to determine the proportion of variants that would be expected to lie in the region of interest under the null (a uniform distribution), and the rates are compared with a binomial test.  This table appears in the main text as Table 5, duplicated here for convenience.
+
+```{r S4a_forSupp, cache=FALSE}
+knitr::kable(tableS4a,digits=50)
+```
+
+**_Table S4b - Sites of IHM-priming interactions are over-represented amongst DCM-causing variants._** The distribution of DCM-causing variants is assessed across individual reaction motifs.  Only the "f" interactions, that are found on the blocked head and tail and contribute to IHM priming, achieve statistical significance. Full variant details are shown in Table 3.
+
+### S4b
+```{r S4b_forSupp, cache=FALSE}
+knitr::kable(tableS4b,digits=50)
+```
+
+**_Table S4c - DCM-causing variants cluster are enriched at the nucleotide binding pocket._** The distribution of DCM-causing variants is assessed for individual motor domain functional regions. Full variant details are shown in Table 3.
+
+```{r S4c_forSupp, cache=FALSE}
+knitr::kable(tableS4c,digits=50)
+```
+
+**_Table S4d - DCM-causing variants grouped by myosin head state._** The number of DCM-causing variants that impact IHM residues differs for paired myosins depending whether the head is free or blocked in the pair.  Here the number of DCM-causing variants is tabulated for IHM residues found on the free head (FH), blocked head (BH), and myosin tail. Full variant details are shown in Table 3.
+
+```{r S4d_forSupp, cache=FALSE}
+knitr::kable(tableS4d,digits=50)
+```
