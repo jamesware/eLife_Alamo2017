@@ -1,0 +1,1568 @@
+---
+title: "IHM analysis"
+author: "james ware"
+date: "`r Sys.Date()`"
+output:
+  html_document
+  #word_document:
+  #  reference_docx: ../analyses/template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache=TRUE)
+options(stringsAsFactors=FALSE)
+library(dplyr)
+library(tidyr)
+library(pander)
+library(knitr)
+library(gdata)
+```
+
+```{r defineFunctions}
+source(file.path("..","R","defineIHM.R"))
+source(file.path("..","R","seekEnrichment.R"))
+source(file.path("..","R","caseControl.R")) 
+source(file.path("..","R","defineMD.R"))
+source(file.path("..","R","functions.R"))
+source(file.path("..","R","annotateCharges.R"))
+source(file.path("..","R","downloadData.R"))
+```
+
+```{r downloadData}
+if(!"Supplementary_Tables_resubmit.xlsx" %in% list.files(path = "../data-raw")){
+  downloadWalsh()
+}
+if(!"pnas.1606950113.sd02.xlsx" %in% list.files(path = "../data-raw")){
+  downloadHomburger()
+}
+```
+
+Note that all statistical analyses focus on variants directly impacting MYH7 (not light chains).
+
+#### Interaction definitions
+IHM interactions defined according to Alamo et al.  
+```{r defineInteractions, include=F}
+interactions <- defineIHM() %>% tbl_df
+interactions %>%
+  group_by(state,interaction,label) %>%
+  summarise(nResidues=length(unique(aaPos))) %>%
+  pander
+
+interactions <- mutate(interactions,intState=paste(interaction," (",state,")",sep=""))
+
+# define interaction groups
+groupA <- c("f1","f2","g")
+groupB <- c("h","i","j")
+groupC <- c("a","d1","d2","e")
+groupD <- c("elc-mhc","rlc-mhc")
+```
+
+```{r defineInteractions2}
+group0=formatRes(interactions)
+group1 <- interactions %>%
+  filter(type=="priming") %>%
+  formatRes
+group2 <- interactions %>%
+    filter(type=="anchoring") %>%
+  formatRes
+group3 <- interactions %>%
+    filter(type=="stabilising") %>%
+  formatRes
+group4 <- interactions %>%
+    filter(type=="scaffolding") %>%
+  formatRes
+```
+
+These interactions are grouped into four:
+
+- IHM "priming" = bh docks to own S2 - (f,g) 
+[`r length(unique(group1))` aa]
+- IHM "anchoring" = bh & elc to neighbouring tail (h,j,i) 
+[`r length(unique(group2))` aa]
+- IHM "stabilising" = fh & bh dock (e,d,a) 
+[`r length(unique(group3))` aa]
+- IHM "scaffolding" = LC / HC interactions (rlc-mhc / elc-mhc) 
+[`r length(unique(group4))` aa]
+
+Total length IHM interactions = `r length(unique(interactions$aaPos))`   
+
+(the paper also talks about IHM "regulating".  These describe RLC-RLC interactions, and so do not directly involve any residues on MYH7)
+
+*Summary of interaction zones (not represented as table in manuscript, as this data is already encapsulated in supp tables)*
+```{r}
+interactions %>%
+  group_by(state,interaction,label) %>%
+  summarise(nResidues=length(unique(aaPos))) %>%
+  pander
+```
+
+#### Motor functional domains
+Define functional motor domains
+```{r defineMD, include=F}
+mdFunctional <- defineMD() %>% tbl_df
+mdFunctional %>%
+  group_by(activity,label) %>%
+  summarise(nResidues=length(unique(aaPos))) %>%
+  pander
+motorFunctional <- mdFunctional$aaPos %>% unique
+```
+
+*Summary of md functional sites*
+```{r}
+mdFunctional %>%
+  group_by(activity,label) %>%
+  summarise(nResidues=length(unique(aaPos))) %>%
+  pander
+```
+
+#### Other regions of interest analysed
+
+```{r defineRegions}
+myosinHeadCluster=181:937
+myosinHead_intersectIHM=myosinHeadCluster[myosinHeadCluster %in% interactions$aaPos]
+myosinHead_notIHM=myosinHeadCluster[!myosinHeadCluster %in% interactions$aaPos]
+myosinTotal=1:1935
+
+homburgerFile <- file.path("..","data-raw","pnas.1606950113.sd02.xlsx")
+homburgerData <- gdata::read.xls(homburgerFile, sheet=1) %>% tbl_df 
+homburgerSphere <- homburgerData %>% filter(Sphere.Enriched.Pre.Stroke=="Yes") %>% select(ResidueNo) %>% unlist
+homburgerSurface <- homburgerData %>% filter(Surface.Enriched.Pre.stroke=="Yes") %>% select(ResidueNo) %>% unlist
+```
+
+- We look at the region of the _MYH7_ head identified as enriched in HCM in Walsh et al  
+Myosin head region = 181-937 [`r length(myosinHeadCluster)` aa]  
+length myosin head intersecting IHM interactions = `r length(myosinHead_intersectIHM)`  
+length myosin head excluding IHM interactions = `r length(myosinHead_notIHM)`  
+
+- Homburger *et al* (Spudich, Ashley etc PNAS 2016)  define a small sphere in the converter, and a large surface over the mesa that are enriched in HCM.  
+We look at these in pre-stroke state:    
+size converterSphere = `r length(homburgerSphere)` aa   
+size mesaSurface = `r length(homburgerSurface)`  aa  
+
+#### Overlap between definitions
+There is significant overlap between sites involved in IHM generation, and sites involved in motor functions:  
+
+Table showing number of residues labelled as IHM, mdFunctional, both, or neither (total = 1935).  
+```{r}
+allSites=data.frame(aaPos=1:1935,Variant_HGVS=1:1935,consensusClass=NA)
+countOverlap(allSites,myClasses=NA) %>% 
+  mutate(label=factor(label,levels=c("ihm","md","both","none"))) %>%
+  arrange(label) %>%
+  rename(allResidues=nVars) %>%
+  pander
+```
+
+The converter is particularly key (and potentially confusing) - highlighted in the Homburger paper, but also with direct motor function, and involved in several IHM interactions.  The following summarises IHM interactions overlying the Homburger converter sphere
+
+```{r viewConverter}
+data.frame(aaPos=homburgerSphere) %>%
+  left_join(interactions, by = "aaPos") %>%
+  group_by(interaction,state,label) %>%
+  summarise(nResidues=n()) %>% 
+  replace_na(list(label = "no_overlap")) %>%
+  pander
+```
+
+Note that the `r length(homburgerSurface)` aa hcm-enriched surface on the mesa also incorporates many IHM interacting residues.  Approximately half of this surface 
+(`r sum(homburgerSurface %in% interactions$aaPos)` / `r length(homburgerSurface %in% interactions$aaPos)` = `r 100*signif(sum(homburgerSurface %in% interactions$aaPos) / length(homburgerSurface %in% interactions$aaPos),2)`%) 
+comprises residues that we have defined as part of the IHM mechanism.  
+
+Length of IHM interactions overlapping with pre-stroke mesa surface:  
+```{r}
+data.frame(aaPos=homburgerSurface) %>%
+  left_join(interactions, by = "aaPos") %>%
+  group_by(interaction,state,label) %>%
+  summarise(nResidues=n()) %>% 
+  replace_na(list(label = "no_overlap")) %>%
+  pander
+```
+
+```{r readCaseVars, warning=FALSE}
+##read case series data
+hcmSeriesFile <- file.path("..","data-raw","Supplementary_Tables_resubmit.xlsx")
+
+OMGL <- gdata::read.xls(hcmSeriesFile, sheet=1) %>% 
+  tbl_df %>%
+  tidyMyInput(sourceLabel="OMGL")
+# note warning because case/sequenced is duplicated for 1 MYPBC3 variant at line 262
+
+PLMM <- gdata::read.xls(hcmSeriesFile, sheet=2) %>% 
+  tbl_df %>%
+  tidyMyInput(sourceLabel="PLMM")
+
+caseVariants <- rbind(OMGL,PLMM)
+```
+
+```{r lightChains, eval=FALSE}
+hcmMYL <- caseVariants %>%
+  filter(Gene %in% c("MYL2","MYL3"),Disease=="HCM",Variant_type=="missense") %>%
+  tidyr::extract(Variant_protein,
+                 into=c("Variant_protein","aaPos"),
+                 regex="(p.[:alpha:]([[:digit:]]+)[:alpha:])"
+  ) %>%
+  mutate(aaPos=as.numeric(aaPos))
+```
+
+
+```{r trimMyh7}
+#consider only missense, MYH7 & HCM OR DCM
+hcmMis <- caseVariants %>%
+  filter(Gene=="MYH7",Disease=="HCM",Variant_type=="missense") %>%
+  tidyr::extract(Variant_protein,
+                 into=c("Variant_protein","aaPos"),
+                 regex="(p.[:alpha:]([[:digit:]]+)[:alpha:])"
+  ) %>%
+  mutate(aaPos=as.numeric(aaPos))
+
+dcmMis <- caseVariants %>%
+  filter(Gene=="MYH7",Disease=="DCM",Variant_type=="missense") %>%
+  tidyr::extract(Variant_protein,
+                 into=c("Variant_protein","aaPos"),
+                 regex="(p.[:alpha:]([[:digit:]]+)[:alpha:])"
+  ) %>%
+  mutate(aaPos=as.numeric(aaPos))
+```
+
+Note "Consensus class" definition - variants reported as Pathogenic by either lab are pathogenic.  For LP, variants must be concordant (ie not VUS by either).
+
+```{r mergeLabs}
+# Merge data from 2 labs.  Retain conservative classification
+hcmMis <- myMerge(hcmMis)
+dcmMis <- myMerge(dcmMis)
+
+write.table(hcmMis,file.path("..","data-out","hcmMis.txt"),quote=F,row.names=F)
+write.table(dcmMis,file.path("..","data-out","dcmMis.txt"),quote=F,row.names=F)
+```
+
+## Summarise case series
+_MYH7_ missense variant summary.  
+All rare variants (ExAC global MAF < 0.0001) found in probands were classified according to clinical criteria. 
+Variants originated from 2 labs. No variants differed by >1 class (e.g. Path vs VUS). Variants are pathogenic here (consensusClass) if pathogenic by either lab, VUS if vus by either lab.
+Number sequenced (unrelated probands):  
+
+- HCM: 6112  
+- DCM: 1315  
+
+### HCM  
+
+Summary of hcm variants & variant sites (count of total variant-carrying cases, distinct DNA variants, distinct aa substitutions, and distinct aa residues), by variant class:  
+
+```{r summariseCaseVars1}
+tmp <- hcmMis %>%
+  group_by(consensusClass) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(desc(consensusClass))
+
+pander(tmp)
+```
+TOTALS:  
+```{r summariseCaseVarsTotals}
+tmp %>%
+  select(-consensusClass) %>%
+  apply(MARGIN=2,sum) %>%
+  pander
+```
+
+### Tables 1+2
+Data for tables, annotating variants according to impact on IHM & MD residues.  
+For each variant the number of individuals carrying this variant is also shown.
+
+#### Table 1
+Definitive pathogenic variants in HCM:  
+```{r}
+hcmMis %>%
+  joinIhmMd(myClass="5_Pathogenic") %>%
+  kable
+```
+
+#### Table 2
+Likely pathogenic variants in HCM:  
+```{r}
+hcmMis %>%
+  joinIhmMd(myClass="4_likelyPath") %>%
+  kable
+```
+
+## Look for enrichment of MYH7 variants in specific interaction regions and functional sites in **HCM**
+
+Here we are looking at distinct dna variants.  E.g. of 40 known pathogenic DNA variants, 36 (90%) lie in a cluster in the head.  The head cluster, as defined here (aa181-937), comprises 757aa (39% of total length).  Comparisons by binomial test (since counting DNA variants, and more than one DNA can map to the same AA, so margin not fixed for Fisher).  Many of these variants are seen in multiple probands, but each distinct variant is counted once.
+
+For each class of variants, we look for clustering in the the IHM interaction residues,  each of the 4 main interaction sets (ihm-priming, stabilising, anchoring & scaffolding), and the motor domain functional sites.
+
+Column heading key:  
+variants in interaction site = n of known variants (grouped by pathogenicity classification) that lie within the specified region  
+rate = proportion of variants that lie within region of interest (RoI)  
+length of interaction site (aa) = length of RoI  
+expected rate = length of RoI reelative to total protein length, which gives proportion of variants that would be expected to fall within the RoI  
+pValueBinom / rateRatio = comparing proportion of variants within RoI to proportion of protein within RoI  
+
+```{r tableS3a}
+outputPath=tbl_df(data.frame())
+interactionGroups=list(myosinHeadCluster,group0,group1,group2,group3,group4,motorFunctional)
+names(interactionGroups)=c("myosinHeadCluster","allIhmInteractions","priming","anchoring","stabilising","scaffolding","mdFunction")
+for (i in seq(along=interactionGroups)){
+  nextTable <- interactionGroups[[i]] %>%
+  seekEnrichment(myClass="5_Pathogenic",counts="sites",classLabel=names(interactionGroups)[i])
+  outputPath <- bind_rows(outputPath,nextTable)
+}
+tableS3a <- outputPath %>% 
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+#pander(tableS3a)
+```
+
+```{r relabelSuppTablesForPrinting}
+# relabel supp tables for printing
+myNames <- c("interaction","variants in interaction site","rate","length of interaction site (aa)","expected rate","rate ratio","p~binom~")
+myIntLabels <- c("**all IHM interactions**","&nbsp;&nbsp;priming","&nbsp;&nbsp;anchoring","&nbsp;&nbsp;stabilising","&nbsp;&nbsp;scaffolding",
+"**MD functional residues**")
+myNames2 <- c("region","n case variants in RoI","case prevalence","n control variants in RoI","control prevalence","pBinom","odds ratio (OR)","OR 95% CI ","etiological fraction")
+region <- c("**All myosin**","&nbsp;&nbsp;head cluster","&nbsp;&nbsp;not head",
+            "**All IHM interactions**","&nbsp;&nbsp;priming","&nbsp;&nbsp;anchoring","&nbsp;&nbsp;stabilising","&nbsp;&nbsp;scaffolding",
+            "**converter sphere (pre-stroke)**","**mesa surface (pre-stroke)**",
+            "**MD functional sites**"
+            )
+myIntLabelsWithMD <- c("**all IHM interactions**","&nbsp;&nbsp;priming","&nbsp;&nbsp;anchoring","&nbsp;&nbsp;stabilising","&nbsp;&nbsp;scaffolding","**MD functional residues**")
+```
+
+##Supplementary file 3
+
+**HCM-causing variants cluster on residues involved in IHM-related inter- and intra-molecular interactions.**  
+*Table S3a - Pathogenic variants.* For each of the four main IHM interactions (IHM priming, anchoring, stabilizing and scaffolding), the number of distinct pathogenic variants affecting interacting residues (of a total of `r unique(outputPath$caseVarsTotal)` variants) is shown.  The length of the interaction site (no of amino acid residues; total protein length = 1935) is used to determine the proportion of variants that would be expected to lie in the region of interest under the null (a uniform distribution), and the rates are compared with a binomial test.
+
+### S3a
+```{r S3a, cache=FALSE}
+tableS3a <- filter(tableS3a,interaction!="myosinHeadCluster")
+names(tableS3a)=myNames
+tableS3a$interaction=myIntLabels
+knitr::kable(tableS3a,digits=50)
+```
+
+```{r tableS3b}
+outputLP=tbl_df(data.frame())
+# interactionGroups=list(myosinHeadCluster,group0,group1,group2,group3,motorFunctional)
+# names(interactionGroups)=c("myosinHeadCluster","allIhmInteractions","priming","anchoring","stabilising","mdFunction")
+for (i in seq(along=interactionGroups)){
+  nextTable <- interactionGroups[[i]] %>%
+  seekEnrichment(myClass="4_likelyPath",counts="sites",classLabel=names(interactionGroups)[i])
+  outputLP <- bind_rows(outputLP,nextTable)
+}
+tableS3b <- outputLP %>% 
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+#pander(tableS3b)
+tableS3b <- filter(tableS3b,interaction!="myosinHeadCluster")
+```
+
+*Table S3b - Likely pathogenic variants.* Shows equivalent data for `r unique(outputLP$caseVarsTotal)` likely pathogenic variants. The clustering in the IHM priming and stabilising regions is replicated.
+
+### S3b
+```{r S3b, cache=FALSE}
+names(tableS3b)=myNames
+tableS3b$interaction=myIntLabels
+knitr::kable(tableS3b,digits=50)
+```
+
+```{r tableS3c}
+outputPLP=tbl_df(data.frame())
+# interactionGroups=list(myosinHeadCluster,group0,group1,group2,group3,motorFunctional)
+# names(interactionGroups)=c("myosinHeadCluster","allIhmInteractions","priming","anchoring","stabilising","mdFunction")
+for (i in seq(along=interactionGroups)){
+  nextTable <- interactionGroups[[i]] %>%
+  seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),
+                 counts="sites",classLabel=names(interactionGroups)[i])
+  outputPLP <- bind_rows(outputPLP,nextTable)
+}
+tableS3c <- outputPLP %>% 
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+#pander(tableS3c)
+tableS3c <- filter(tableS3c,interaction!="myosinHeadCluster")
+```
+
+*Table S3c - All pathogenic / likely pathogenic variants.* Shows equivalent statistics when `r unique(outputPLP$caseVarsTotal)` pathogenic and likely pathogenic variants are analysed in combination.  
+
+### S3c == main text Table 4
+```{r S3c, cache=FALSE}
+names(tableS3c)=myNames
+tableS3c$interaction=myIntLabels
+knitr::kable(tableS3c,digits=50)
+```
+
+```{r tableS3d}
+outputPandLP=tbl_df(data.frame())
+for (i in unique(interactions$intState)){
+  nextTable <- interactions %>%
+    filter(intState==i) %>%
+    select(aaPos) %>%
+  seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),counts="sites",classLabel=i)
+  outputPandLP <- bind_rows(outputPandLP,nextTable)
+}
+tableS3d <- outputPandLP %>% 
+  arrange(desc(rateRatio)) %>%
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+#pander(tableS3d) 
+```
+
+*Table S3d - All interactions.* Here pathogenic and likely pathogenic variants are combined (total = `r unique(outputPandLP$caseVarsTotal)`), to empower interrogation of each individual interaction motif.  The enrichment is driven by variants impacting on interactions i,d,j & ELC-MHC (see Tables S1 & S4).
+
+### S3d
+```{r S3d, cache=FALSE}
+tableS3d <- filter(tableS3d) 
+names(tableS3d)=myNames
+knitr::kable(tableS3d,digits=50) 
+```
+
+**Secondary analyses arising from 3d, for discussion**  
+```{r tableS3next}
+byInteraction <- function(df=interactions,
+                          myGroup="interaction",
+                          myClass=c("4_likelyPath","5_Pathogenic"),
+                          caseData=hcmMis
+                          ){
+  output=tbl_df(data.frame())
+  for (i in unlist(unique(df[names(df)==myGroup]))){
+  index <- df[,myGroup]==i
+  nextTable <- df[index,"aaPos"] %>%
+    seekEnrichment(myClass,counts="sites",classLabel=i,caseData)
+    output <- bind_rows(output,nextTable)
+  }
+  output %>% arrange(desc(rateRatio)) %>%
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom) %>%
+  return()
+}
+
+```
+
+Group interactions (collapse bh/fh/tail):
+```{r tableS_dextra_collapseBhFhTail}
+nextTable <- byInteraction(caseData=hcmMis)
+names(nextTable)=myNames
+knitr::kable(nextTable,digits=50) 
+```
+
+Collapse d & f
+```{r tableS_dextra_collapseDandF}
+nextTable <- interactions %>%
+  mutate(interaction=gsub("[[:digit:]]","",interaction)) %>%
+  filter(interaction %in% c("d","f")) %>%
+  byInteraction(caseData=hcmMis)
+names(nextTable)=myNames
+knitr::kable(nextTable,digits=50) 
+```
+
+### S3f  
+
+*Table S3f - group by FH vs BH.*
+
+```{r tableS_dextra_groupBhFhTail}
+tableS3f=byInteraction(myGroup="state",caseData=hcmMis)
+names(tableS3f)=myNames
+tableS3f <- tableS3f %>% arrange(interaction)
+knitr::kable(tableS3f,digits=50) 
+```
+
+Group by Interaction group AND FH vs BH
+```{r tableS_dextra_groupByInteractionAndBhFhTail}
+nextTable <- interactions %>%
+  mutate(stateAndType=paste(state,type,sep="_")) %>%
+  byInteraction(myGroup="stateAndType",caseData=hcmMis) %>%
+  arrange(interaction)
+names(nextTable)=myNames
+knitr::kable(nextTable,digits=50) 
+```
+
+*Table S3e - All MD functional sites.* Pathogenic and likely pathogenic variants are combined as above (total = `r unique(outputPandLP$caseVarsTotal)`), to empower interrogation ofindividual motor domain functional sites.
+
+### S3e
+```{r tableS3e}
+outputPandLP=tbl_df(data.frame())
+for (i in unique(mdFunctional$activity)){
+  nextTable <- mdFunctional %>%
+    filter(activity==i) %>%
+    select(aaPos) %>%
+  seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),counts="sites",classLabel=i)
+  outputPandLP <- bind_rows(outputPandLP,nextTable)
+}
+tableS3e <- outputPandLP %>% 
+  arrange(desc(rateRatio)) %>%
+  select(activity=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+#pander(tableS3e)
+names(tableS3e)=myNames
+knitr::kable(tableS3e,digits=50)
+```
+
+```{r writeSupplementaryFile3, include=F, cache=F}
+### Write supplementary table word doc
+#rmarkdown::render(file.path(".","tableS3.Rmd"),envir=as.environment(1))
+```
+
+###########
+
+## Case control comparison: **HCM**
+
+We go on to compare the *prevalence* of variants in our case series with the prevalence in the (non-finnish) European ExAC reference samples.  We consider all rare variants in cases, irrespective of classification, and compare burdens in cases vs controls.  Here analysis is per variant observation, rather than per site (e.g. 40 path variants are seen 322 times in total).  This enable us to consider the clinical interpretability of variants in different regions.
+
+We look at case/control prevalence for variants across the whole protein, in the head, in the interaction domains highlighted in this ms,  each of the 4 sub-groups of interactions, and the md functional sites.
+
+Notes
+
+- rare = global ExAC AF < 1e-4 (as for vars in cases)
+- binom directly compares variant prevalence
+- ORs / fisher test are under the assumption of 1 variant per person  
+- assume that total nControls = 33364 (median number genotyped across variant sites.  true total number = 33370)
+
+```{r readExac}
+exacVars <- loadExAC()
+```
+
+### Summarise ExAC
+Considering rare (<0.0001 ExAC global MAF) _MYH7_ missense variants *in caucasians*:  
+```{r}
+exacVars %>%
+  filter(NFE_AC>0) %>%
+  summarise(
+    #nCases=sum(mut_exac_count),
+    nCases=sum(NFE_AC),
+    nVars=length(unique(mut_coding)),
+    nSubstitutions=length(unique(mut_protein)),
+    nResidues=length(unique(mut_position))
+  ) %>%
+  pander
+```
+
+Comparison of variant prevalence  
+nCases=6112  
+nControls=33364  
+
+
+
+## Supplementary file 6
+Comparison of prevalence of rare (ExAC global AF < 1x10^-4^) missense variants in _MYH7_ in 6112 HCM cases and ExAC controls (median number genotype per site = 33364). Prevalence are compared using the binomial test. In the absence of individual-level genotypes for ExAC, the odds ratio is computed under the assumption that no individual contains more than one variant, so the number of variant carriers / non-carriers is extrapolated from the variant prevalence.  The etiological fraction, a derivative of the attributable risk percent, is computed as (OR-1)/OR, and is interpreted as the proportion of variants in cases that are causative of the disease, or the probability that a randomly selected variant (in a case) is pathogenic rather than a benign bystander.  
+
+```{r caseControlResults, results='asis', dependson="caseControlFunction"}
+myBurdenTable <- myCaseControlSummaryTable(hcmMis,nCases=6112)
+```
+
+###Table S6a
+Prevalences and odds ratios are shown for the whole myosin protein, and for pre-specified regions of interest: the head (defined in **Walsh et al**), the mesa surface & converter "sphere" region (in the pre-stroke state; **Homburger et al**), the IHM-related interactions, and the motor domain functional residues. _"RoI"_ = region of interest.  p-value for all comparisons is < 1x10^-40^. 
+
+```{r tableS6a, cache=FALSE}
+myBurdenTable <- cbind(region,myBurdenTable)
+names(myBurdenTable) <- myNames2
+tableS6a <- select(myBurdenTable,-pBinom)
+knitr::kable(tableS6a,row.names = F,digits=50)
+```
+
+```{r allInteractions}
+myBurdenTable2=tbl_df(data.frame())
+for (i in unique(interactions$intState)){
+  nextTable=data.frame(interaction=i)
+  nextTable <- cbind(nextTable,
+                     interactions %>%
+                     filter(intState==i) %>%
+                     formatRes %>%
+                     caseControl
+                     )
+myBurdenTable2 <- bind_rows(myBurdenTable2,nextTable)
+}
+myBurdenTable2 <- myBurdenTable2 %>% 
+  arrange(desc(orFisher)) %>%
+  select(interaction,caseVarsTarget,casePrev,contVarsTarget,controlPrev,
+         pValueBinom,or=orFisher,ci=ciFisher,ef)
+myBurdenTable2[myBurdenTable2$ef=="NaN","ef"] <- 1 #where OR = infinity, make EF = 1 instead of NaN.
+```
+
+```{r groupedTableForHighlyInterpretableRegions}
+#Calculate grouped data for all interactions with EF > 0.99
+tableS6c <- myBurdenTable2 %>%
+  filter(ef >= 0.99) %>%
+  ungroup %>%
+  summarise(
+    caseVarsTarget=sum(caseVarsTarget),
+    casePrev=caseVarsTarget/6112,
+    contVarsTarget=sum(contVarsTarget),
+    contPrev=contVarsTarget/33364,
+    or=c(caseVarsTarget,6112-caseVarsTarget,contVarsTarget,33364-contVarsTarget) %>%
+      matrix(2,2) %>%
+      (function(x){fisher.test(x)$estimate}),
+    ciFisher=c(caseVarsTarget,6112-caseVarsTarget,contVarsTarget,33364-contVarsTarget) %>%
+      matrix(2,2) %>%
+      (function(x){fisher.test(x)$conf.int}) %>%
+             signif(3) %>%
+             paste(collapse="-"),
+    ef=(or-1)/or
+  ) %>%
+  mutate(casePrev=signif(casePrev,3),
+         contPrev=signif(contPrev,3),
+         or=signif(or,3),
+         ef=signif(ef,3))
+  
+names(tableS6c) <- myNames2[-c(1,6)]
+```
+
+###Table S6b
+Equivalent data is shown for all IHM interaction regions as defined in Table S2.  Prevalence at interactions f1 (bh), a (fh) and h (bh) does not differ significantly.  For other comparisons p < 1x10^-7^.
+```{r tableS6b, cache=FALSE}
+names(myBurdenTable2) <- myNames2
+names(myBurdenTable2)[1] <- "IHM interaction"
+tableS6b <- select(myBurdenTable2,-pBinom)
+knitr::kable(tableS6b,digits=50)
+
+```
+
+*table S6b p-values (for reference)*
+```{r}
+myBurdenTable2[,c(1,6)] %>%
+  pander 
+```
+
+###Table S6c
+Present data for combined interactions with individual EF > 0.99
+
+```{r, cache=F}
+pander(tableS6c)
+```
+
+
+###Table S6d
+Equivalent data is shown for all motor domain functional sites.  All comparisons are significant (p < 1x10^-15^.)
+```{r allMdSites}
+myBurdenTable3=tbl_df(data.frame())
+for (i in unique(mdFunctional$activity)){
+  nextTable=data.frame(activity=i)
+  nextTable <- cbind(nextTable,
+                     mdFunctional %>%
+                     filter(activity==i) %>%
+                     formatRes %>%
+                     caseControl
+                     )
+myBurdenTable3 <- bind_rows(myBurdenTable3,nextTable)
+}
+myBurdenTable3 <- myBurdenTable3 %>% 
+  arrange(desc(orFisher)) %>%
+  select(activity,caseVarsTarget,casePrev,contVarsTarget,controlPrev,
+         pValueBinom,or=orFisher,ci=ciFisher,ef)
+#pander(myBurdenTable3) 
+```
+
+```{r tableS6d, cache=FALSE}
+names(myBurdenTable3) <- myNames2
+names(myBurdenTable3)[1] <- "md function"
+tableS6d <- select(myBurdenTable3,-pBinom)
+knitr::kable(tableS6d,digits=50) 
+```
+
+*table S6c p-values (for reference, not intended for inclusion)*
+```{r}
+myBurdenTable3[,c(1,6)] %>%
+  pander
+```
+
+```{r writeTableS6, include=F, cache=F}
+#rmarkdown::render(file.path(".","tableS6.Rmd"),envir=as.environment(1)) 
+```
+
+### Table S6e
+This analysis confirms that controls do not display regional clustering at sites of interest.
+```{r exacClustering}
+exacMis <- exacVars %>%
+  filter(NFE_AC>0) %>%
+  transmute(Variant_HGVS=mut_coding,
+         aaPos=mut_position,
+         Variant_protein=mut_protein,
+         cases=NFE_AC,
+         classification=NA,
+         source=NA,
+         consensusClass="3_VUS"
+         )
+
+outputExac=tbl_df(data.frame())
+# interactionGroups=list(myosinHeadCluster,group0,group1,group2,group3,motorFunctional)
+# names(interactionGroups)=c("myosinHeadCluster","allIhmInteractions","priming","anchoring","stabilising","mdFunction")
+for (i in seq(along=interactionGroups)){
+  nextTable <- interactionGroups[[i]] %>%
+  seekEnrichment(caseData=exacMis,
+                 myClass="3_VUS",
+                 counts="sites",
+                 classLabel=names(interactionGroups)[i])
+  outputExac <- bind_rows(outputExac,nextTable)
+}
+newTable <- outputExac %>% 
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+
+tableS6extra <- filter(newTable,interaction!="myosinHeadCluster")
+```
+
+```{r exacClustering2, cache=FALSE}
+names(tableS6extra)=myNames
+tableS6extra$interaction=myIntLabels
+knitr::kable(tableS6extra,digits=50)
+```
+
+## Summary of findings (considering HCM alone):  
+
+- Definitive and likely pathogenic variants do cluster in the IHM forming interaction sites, as well as at motor domain functional sites.
+- Signal is strongest for definitive pathogenic variants, though similar patterns are seen for VUS (not shown)
+- enrichment is most marked for "stabilising" interactions
+- anchoring is least remarkable, and note that most residues involved in the anchoring interaction are also involved in other IHM forming interactions, so the relevant biology may be mediated by other actions.
+- inspection of individual interactions (Table S6d) highlights a number of interactions, including
+
+    - i: 5 variants in just 8bp motif
+    - d1 (fh & bh)
+    - d2 (fh only)
+    - g (bh) & a (tail)  
+    (all at least 5x over expected)
+
+Considering the case/control comparison,  we see that all interaction regions are enriched, but the anchoring region is relatively unimpressive - the OR is equivalent to the average for all of myosin. The other sub-interactions all have OR > 50.
+
+Looking at the data for each of the individual interactions, we identify 7 interaction sites with disease odds ratios > 100, indicating >99% probability of pathogenicity (when found in a case). 
+Between them, these sites account for ~44% of variants in cases, yet less than 4% of control variants.
+These regions encapsulate a very important fraction of variants in HCM that have a high prior probability of pathogenicity even before other interpretive data (segregation, functional characterisation) is considered, and are likely to be clinically actionable.
+
+Other notes: g & d1 
+g (bh) (a priming interaction) - this site only comprises 8 residues. 4 different variants are found in 30 cases, with no variants in controls.
+However, 3/4 of these variants also impact d1 (fh), so can't distinguish which interaction is critical, or could be both.
+d1 (bh) (stabilising - part of the head-head interaction) - comprises 16 residues. 7 different variants in 32 cases, none in controls (this includes 4 different substitutions at R403).
+However, these residues are also involved in actin-myosin binding.
+
+There is a lot of colinearity between involvement in IHM formation and involvement in motor activity, so difficult to tease those out.
+
+
+
+## DCM
+
+Summary of hcm variant sites (count of cases, distinct DNA variants, distinct aa substitutions, and distinct aa residues), for variants reported as Pathogenic by either lab:  
+
+```{r summariseCaseVarsDcm}
+tmp <- dcmMis %>%
+  group_by(consensusClass) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(desc(consensusClass))
+kable(tmp)
+```
+
+Path / likelyPath combined:
+```{r summariseCaseVarsDcm2}
+dcmSummary <- dcmMis %>%
+  ungroup %>%
+  filter(consensusClass %in% c("5_Pathogenic","4_likelyPath")) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  )
+pander(dcmSummary)
+```
+
+TOTALS:  
+```{r summariseCaseVarsDcmTotals}
+tmp %>%
+  select(-consensusClass) %>%
+  apply(MARGIN=2,sum) %>%
+  pander
+```
+
+
+### Table 3
+As for HCM additional md functional domain info for Table 3 (path & likelyPath combined):  
+```{r}
+dcmMis %>%
+  joinIhmMd %>%
+  kable
+```
+
+## Look for enrichment of variants in specific interaction regions in **DCM**
+### Supplementary file 4
+#### Table S4a == Table 5 (main text)
+Compare pathogenic / likely pathogenic (counting sites):  
+total variant sites = `r dcmMis$consensusClass %in% c("4_likelyPath","5_Pathogenic") %>% sum()`  
+total protein length = 1935  
+
+```{r clusterAnalysisDcm}
+# row1 <- myosinHeadCluster %>%
+# seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="myosinHeadCluster",counts="sites")
+
+row2 <- group0 %>%
+  seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="allIhmInteractions",counts="sites")
+
+row3 <- group1 %>%
+  seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="priming",counts="sites")
+
+row4 <- group2 %>%
+  seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="anchoring",counts="sites")
+  
+row5 <- group3 %>%
+    seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="stabilising",counts="sites")
+
+row51 <- group4 %>%
+    seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="scaffolding",counts="sites")
+
+row6 <- mdFunctional %>%
+    seekEnrichment(myClass=c("5_Pathogenic","4_likelyPath"),caseData=dcmMis,classLabel="mdFunctional",counts="sites")
+
+tableS4a <- rbind(row2,row3,row4,row5,row51,row6) %>% 
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+# pander(tableS4a)
+# tableS4a <- tableS4a[-6,]
+```
+
+```{r tableS4a}
+names(tableS4a)=myNames
+tableS4a$interaction=myIntLabels
+knitr::kable(tableS4a,digits=50)
+```
+
+#### Table S4b
+All interactions  **DCM**  
+Compare pathogenic / likely pathogenic (counting sites)  
+total variant sites = `r dcmMis$consensusClass %in% c("4_likelyPath","5_Pathogenic") %>% sum()`  
+total protein length = 1935  
+
+To reduce multiple testing given small numbers of DCM variants, analyses individual interactions without separating BH/FH/tail state:
+Group interactions (collapse bh/fh/tail):
+```{r tableS4b}
+tableS4b <- byInteraction(caseData=dcmMis)
+names(tableS4b)=myNames
+knitr::kable(tableS4b,digits=50) 
+```
+
+**Extension of S4b to check numbers for text (for reference, not tabulated in supplement):**  
+Collapse d & f
+```{r}
+nextTable <- interactions %>%
+  mutate(interaction=gsub("[[:digit:]]","",interaction)) %>%
+  filter(interaction %in% c("d","f")) %>%
+  byInteraction(caseData=dcmMis)
+names(nextTable)=myNames
+knitr::kable(nextTable,digits=50) 
+```
+
+#### Table S4c
+```{r clusterAnalysisAllMdActivitiesDcm}
+output=tbl_df(data.frame())
+for (i in unique(mdFunctional$activity)){
+  nextTable <- mdFunctional %>%
+    filter(activity==i) %>%
+    select(aaPos) %>%
+  seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),caseData=dcmMis,counts="sites",classLabel=i)
+  output <- bind_rows(output,nextTable)
+}
+tableS4c <- output %>% 
+  arrange(desc(rateRatio)) %>%
+  select(interaction=class,caseVarsTarget,varsRateOnTarget,
+         aaLengthTarget,aaRateOnTarget,rateRatio,pValueBinom)
+
+names(tableS4c)=myNames
+knitr::kable(tableS4c,digits=50)
+```
+
+#### Table S4d
+Group by FH vs BH
+```{r tableS4d}
+tableS4d=byInteraction(myGroup="state",caseData=dcmMis)
+names(tableS4d)=myNames
+knitr::kable(tableS4d,digits=50) 
+```
+
+#### Supplementary file 7
+*Interpretability: computed DCM odds ratios for interaction regions by comparing variant prevalence against ExAC*  
+
+```{r caseControlDcm, results='asis'}
+tableS7 <- myCaseControlSummaryTable(dcmMis,nCases=1315) %>%
+  cbind(region,.) 
+```
+
+```{r caseControl_nbp}
+#calculate data for the nucleotide binding pocket
+nbpResidues <- mdFunctional$aaPos[mdFunctional$activity=="nucleotideBinding"] %>% unique
+nbp <- caseControl(nbpResidues,caseData=dcmMis,controlData=exacVars,nCases=1315,nControls=33364)
+rownames(nbp) <- "nucleotideBindingPocket"
+nbp <- nbp %>%
+  select(-nCases,-nControls,-pValueFisher) %>%
+  rename(or=orFisher,ci=ciFisher)
+nbp$region="&nbsp;&nbsp;nucleotide binding" 
+```
+
+```{r tableS7}
+tableS7 <- bind_rows(tableS7,nbp)
+names(tableS7) <- myNames2
+tableS7 %>%
+  select(-pBinom) %>%
+  knitr::kable(row.names = F,digits=50)
+# pander(tableS7) 
+```
+
+*table S7 p-values (for reference)*
+```{r S7}
+tableS7 %>%
+  select(pBinom) %>%
+  pander 
+```
+
+```{r writeTableS7, include=F, cache=F}
+### Write supp tables S7 to word file
+rmarkdown::render(file.path(".","suppFile7.Rmd"),envir=as.environment(1)) 
+```
+
+## Summary of findings:  
+Association of MYH7 variants with DCM is weaker, small numbers, much more modest ORs.  
+We do still see an association with IHM formation, but this is limited to the priming interactions (specifically "f")  
+There is a robust association with MD functional sites, driven primarily by variants at the nucleotide binding sites.
+
+Note that many HCM variants affect converter, which has both IHM & motor function. This is not a feature of DCM.  
+DCM variants affect IHM priming, but spare the stabilising interactions that predominate in HCM.  
+DCM variants affect nucleotide binding, which is not prominent in HCM. 
+
+### Comparison DCM vs HCM
+
+Tabuluate proportion of variants (path & likelyPath) in each condition that are found in IHM sites, md functional sites, or residues that have both motor & IHM functionality?  
+```{r}
+variantSummary <- countOverlap(hcmMis) %>% rename(hcmVars=nVars) %>%
+  left_join(countOverlap(dcmMis) %>% rename(dcmVars=nVars), by="label") %>%
+  left_join(countOverlap(allSites,myClasses=NA) %>% rename(allResidues=nVars), by="label") %>%
+  mutate(label=factor(label,levels=c("ihm","md","both","none"))) %>%
+  arrange(label)
+
+variantSummary %>% kable
+```
+
+Compare the distributions using chi-squre:
+```{r}
+variantSummary %>% select(-label) %>% chisq.test()
+```
+
+Having established a difference, we are justified in doing pairwise comparisons, and find that HCM & DCM are statistically distinct - in keeping with the qualitative analyses above.
+
+chi square comparisons:  
+hcm vs expectation = $`r (variantSummary %>% select(hcmVars,allResidues) %>% chisq.test)$p.value %>% signif(3)`$  
+dcm vs expectation = $`r (variantSummary %>% select(dcmVars,allResidues) %>% chisq.test)$p.value %>% signif(3)`$  
+hcm vs dcm = $`r (variantSummary %>% select(hcmVars,dcmVars) %>% chisq.test)$p.value %>% signif(3)`$  
+
+###########
+## Additional material for authors' reference:
+
+### Mesa variants
+Table of numbers of HCM variants on the Mesa, by class.  
+Mesa defined according to Homburger et al, pre-stroke state.  
+```{r mesaTotals}
+tmp <- hcmMis %>%
+  filter(aaPos %in% homburgerSurface) %>%
+  group_by(consensusClass) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(desc(consensusClass))
+
+pander(tmp)
+```
+TOTALS:  
+```{r mesaTotals2}
+tmp %>%
+  select(-consensusClass) %>%
+  apply(MARGIN=2,sum) %>%
+  pander
+```
+
+List of all variants on the Mesa - definitive pathogenic variants in HCM: 
+(masked from html with `include=FALSE`)  
+```{r, include=FALSE}
+hcmMis %>%
+    ungroup %>%
+    filter(consensusClass=="5_Pathogenic") %>%
+    filter(aaPos %in% homburgerSurface) %>%
+    kable
+```
+
+List of all variants on the Mesa - likely pathogenic variants in HCM:  
+```{r, include=FALSE}
+hcmMis %>%
+    ungroup %>%
+    filter(consensusClass=="4_likelyPath") %>%
+    filter(aaPos %in% homburgerSurface) %>%
+    kable
+```
+
+### Supplementary file 5
+*Table S5 - Assessing the enrichment of HCM and DCM-causing variants on the mesa*
+```{r mesaNumbers}
+tableS5 <- rbind(
+    homburgerSurface %>% seekEnrichment(myClass="5_Pathogenic",counts="sites",classLabel="hcm_Path"),
+    homburgerSurface %>% seekEnrichment(myClass="4_likelyPath",counts="sites",classLabel="hcm_likelyPath"),
+  homburgerSurface %>% seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),counts="sites",classLabel="hcm_P&LP"),
+  homburgerSurface %>% seekEnrichment(myClass=c("4_likelyPath","5_Pathogenic"),caseData=dcmMis,counts="sites",classLabel="dcm_P&LP")
+  ) %>%
+    select(class,caseVarsTarget,varsRateOnTarget,
+         rateRatio,pValueBinom)
+tableS5$class <- c("HCM, pathogenic","HCM, likely pathogenic","HCM, all pathogenic","DCM, all pathogenic")
+names(tableS5) <- c("","n variants on mesa", "proportion of variants on mesa", "enrichment", "p~binom~")
+pander(tableS5)
+```
+
+```{r writeTableS5, include=F, cache=F}
+### Write supplementary table word doc
+#rmarkdown::render(file.path(".","tableS5.Rmd"),envir=as.environment(1)) 
+```
+
+
+### Tabulate numbers per macro protein region (S1/S2/LMM) for reference
+### HCM
+#### HCM by variant class & domain
+```{r}
+domains=data.frame(
+  domain=c("S1","S2","LMM"),
+  start=c(1,838,1262),
+  end=c(837,1261,1935),
+  colour=c("burlywood","chocolate2","chocolate4")
+)
+
+labelDomains <- function(x){
+  if (x >= 1 & 837 >= x){return("S1")} else
+    if (x >= 838 & 1261 >= x){return("S2")} else
+      if (x >= 1262 & 1935 >= x){return("LMM")} else
+    return(NA)
+}
+  
+hcmMis %>%
+  mutate(domain=labelDomains(aaPos)) %>%  
+  mutate(domain=factor(domain,levels=c("S1","S2","LMM"))) %>%  
+ group_by(domain,consensusClass) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(domain) %>%
+  pander
+
+```
+
+#### HCM Path & likelyPath combined
+```{r}
+hcmMis %>%
+  mutate(domain=labelDomains(aaPos)) %>%  
+  mutate(domain=factor(domain,levels=c("S1","S2","LMM"))) %>%  
+ filter(consensusClass %in% c("5_Pathogenic","4_likelyPath")) %>%
+  group_by(domain) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(domain) %>%
+  pander
+```
+
+#### DCM Path & likelyPath combined
+```{r}
+dcmMis %>%
+  mutate(domain=labelDomains(aaPos)) %>%  
+  mutate(domain=factor(domain,levels=c("S1","S2","LMM"))) %>%  
+ filter(consensusClass %in% c("5_Pathogenic","4_likelyPath")) %>%
+  group_by(domain) %>%
+  summarise(
+    nCases=sum(cases),
+    nDistinctVariants=n(),
+    nDistinctSubstitutions=length(unique(Variant_protein)),
+    nDistinctResidues=length(unique(aaPos))
+  ) %>%
+  arrange(domain) %>%
+  pander
+```
+
+### Annotations for MYH7 S532P and F764L (not seen in our cohort, but discussed as illustrative)
+
+```{r}
+data.frame(variant=c("S535P","F764L"),aaPos=c(535,764)) %>%
+  left_join(interactions,by="aaPos") %>%
+  left_join(mdFunctional,by="aaPos") %>%
+  mutate(ihmLabel=paste(interaction," (",state,")",sep="")) %>%
+  mutate(mdLabel=paste(activity," (",label.y,")",sep="")) %>%
+  select(variant,ihmLabel,mdLabel) %>%
+  kable
+```
+
+### Variants seen in both HCM & DCM
+```{r}
+inner_join(
+select(hcmMis,Variant_protein,hcmCases=cases,hcmClassification=classification,hcmSource=source),
+select(dcmMis,Variant_protein,dcmCases=cases,dcmClassification=classification,dcmSource=source),
+by=c("aaPos", "Variant_protein","Variant_HGVS")) %>%
+  ungroup %>%
+  arrange(aaPos) %>%
+  select(-aaPos,-Variant_HGVS) %>%
+  left_join(select(exacMis,Variant_protein,exacCases=cases),by=c("Variant_protein")) %>%
+  kable
+```
+### Different substitution, same position
+```{r}
+inner_join(
+select(ungroup(hcmMis),aaPos,hcmSubstitution=Variant_protein,hcmCases=cases,hcmClassification=classification,hcmSource=source),
+select(ungroup(dcmMis),aaPos,dcmSubstitution=Variant_protein,dcmCases=cases,dcmClassification=classification,dcmSource=source),
+by=c("aaPos")) %>%
+  arrange(aaPos) %>%
+  mutate(isIdentical=(hcmSubstitution==dcmSubstitution)) %>%
+  filter(!isIdentical) %>%
+  select(-aaPos,-isIdentical) %>%
+  #left_join(select(exacMis,Variant_protein,exacCases=cases),by=c("Variant_protein")) %>%
+  kable
+```
+
+### Exploring charge changes
+#### HCM variants
+```{r}
+aaTable <- defineAATable()
+ 
+hcmMis_chargeAnnotated <- hcmMis %>%
+  ungroup %>%
+  mutate(
+  refAA = Variant_protein %>% gsub("p.","",.) %>% stringr::str_extract("^[[:alpha:]]"),
+  altAA = Variant_protein %>% stringr::str_extract("[[:alpha:]]$")
+  ) %>%
+  annotateCharges
+
+dcmMis_chargeAnnotated <- dcmMis %>%
+  ungroup %>%
+  mutate(
+  refAA = Variant_protein %>% gsub("p.","",.) %>% stringr::str_extract("^[[:alpha:]]"),
+  altAA = Variant_protein %>% stringr::str_extract("[[:alpha:]]$")
+  ) %>%
+  annotateCharges
+```
+
+Tabulating charge changing HCM variants
+```{r}
+hcmMis_chargeAnnotated %>%
+  group_by(consensusClass) %>%
+    summarise(chargeGain=sum(deltaQ>0),
+              chargeLoss=sum(deltaQ<0),
+              chargeChanging=sum(chargeChange),
+              chargeNeutral=sum(chargeChange==F),
+              total=n()
+  ) %>%
+  pander
+```
+
+Restricting to HCM variants on IHM
+```{r}
+hcmMis_chargeAnnotated %>%
+  filter(aaPos %in% interactions$aaPos) %>%
+  group_by(consensusClass) %>%
+    summarise(chargeGain=sum(deltaQ>0),
+              chargeLoss=sum(deltaQ<0),
+              chargeChanging=sum(chargeChange),
+              chargeNeutral=sum(chargeChange==F),
+              total=n()
+  ) %>%
+  pander
+```
+
+```{r}
+chargeTabulations <- function(x=hcmMis_chargeAnnotated,
+                              includeClasses="5_Pathogenic",
+                              ihm=c("priming","scaffolding","stabilising","anchoring")
+){
+  x %>%
+    filter(consensusClass %in% includeClasses) %>%
+    filter(aaPos %in% interactions$aaPos[interactions$type %in% ihm]) %>%
+    #group_by(consensusClass) %>%
+    summarise(chargeGain=sum(deltaQ>0),
+              chargeLoss=sum(deltaQ<0),
+              chargeChanging=sum(chargeChange),
+              chargeNeutral=sum(chargeChange==F),
+              total=n()
+    )
+}
+
+```
+
+Tabulate variants for each of the 4 IHM types (PVs only)
+```{r}
+bind_rows(
+chargeTabulations() %>% mutate(interaction="all IHM"),
+chargeTabulations(ihm="priming") %>% mutate(interaction="priming"),
+chargeTabulations(ihm="scaffolding") %>% mutate(interaction="scaffolding"),
+chargeTabulations(ihm="stabilising") %>% mutate(interaction="stabilising"),
+chargeTabulations(ihm="anchoring") %>% mutate(interaction="anchoring")
+) %>%
+  select(interaction,everything()) %>%
+  pander
+```
+
+Tabulate variants for each of the 4 IHM types (PV & LPV)
+```{r}
+bind_rows(
+chargeTabulations(includeClasses=c("4_likelyPath","5_Pathogenic")) %>% mutate(interaction="all IHM"),
+chargeTabulations(includeClasses=c("4_likelyPath","5_Pathogenic"),ihm="priming") %>% mutate(interaction="priming"),
+chargeTabulations(includeClasses=c("4_likelyPath","5_Pathogenic"),ihm="scaffolding") %>% mutate(interaction="scaffolding"),
+chargeTabulations(includeClasses=c("4_likelyPath","5_Pathogenic"),ihm="stabilising") %>% mutate(interaction="stabilising"),
+chargeTabulations(includeClasses=c("4_likelyPath","5_Pathogenic"),ihm="anchoring") %>% mutate(interaction="anchoring")
+) %>%
+  select(interaction,everything()) %>%
+  pander
+```
+
+
+#### DCM variants & charge
+```{r}
+chargeTabulations(dcmMis_chargeAnnotated,
+                  includeClasses=c("4_likelyPath","5_Pathogenic"),
+                  ihm=c("priming","scaffolding","stabilising","anchoring")
+                  ) %>% 
+  mutate(interaction="all IHM") %>%
+  select(interaction,everything()) %>%
+  pander
+```
+
+
+```{r}
+forBinom <- hcmMis_chargeAnnotated %>%
+  filter(consensusClass=="5_Pathogenic",
+         #consensusClass %in% c("4_likelyPath","5_Pathogenic"),
+         aaPos %in% interactions$aaPos) %>%
+  summarise(x=sum(chargeChange),
+            n=n()
+  )
+```
+Binomial test of proportion of HCM IHM PV that are charge changing (`r signif(100*forBinom$x/forBinom$n,2)`%)
+vs expectation (49%)
+```{r}
+binom.test(x=forBinom$x,
+           n=forBinom$n,
+           p=6285/12850)
+```
+
+
+###########
+## Additional resources
+Tabulate EF & exploratory visualisation:
+IHM regions
+MD regions (excluding IHM)
+Head (excluding IHM & MD)
+Remaining protein
+
+```{r}
+hotspots <- rbind(
+  transmute(interactions,aaPos,category=paste(interaction,"(",state,")",sep="")),
+  select(mdFunctional,aaPos,category=activity)
+      ) %>%
+  group_by(aaPos) %>%
+  summarise(category=paste(category,collapse=","))
+
+mesaConverter <- rbind(
+  data.frame(aaPos=homburgerSurface,category="mesa"),
+  data.frame(aaPos=homburgerSphere,category="converterSphere")
+)%>%
+  group_by(aaPos) %>%
+  summarise(category=paste(category,collapse=",")) %>%
+  filter(!aaPos %in% hotspots$aaPos)
+
+head <- data.frame(aaPos=myosinHeadCluster,category="remainingHead") %>%
+  filter(!aaPos %in% hotspots$aaPos) %>%
+  filter(!aaPos %in% mesaConverter$aaPos)
+
+remainder <- data.frame(aaPos=1:1935,category="remainder") %>%
+  filter(!aaPos %in% hotspots$aaPos) %>%
+  filter(!aaPos %in% mesaConverter$aaPos) %>%
+  filter(!aaPos %in% head$aaPos)
+
+condensed <- rbind(hotspots,mesaConverter,head,remainder) %>%
+  arrange(aaPos)
+
+regionalStats=data.frame(matrix(ncol=4,nrow=0))
+  names(regionalStats)=c("region","hcmCases","dcmCases","exacCounts")
+
+for (region in unique(condensed$category)){
+  myResidues = condensed$aaPos[condensed$category==region]
+  #print(paste(region,length(myResidues)))
+  length=length(myResidues)
+  hcmCases <- hcmMis %>%
+    filter(aaPos %in% myResidues) %>%
+    ungroup %>%
+    summarise(hcmCases=sum(cases))
+   dcmCases <- dcmMis %>%
+    filter(aaPos %in% myResidues) %>%
+    ungroup %>%
+    summarise(dcmCases=sum(cases))
+   exacCounts <- exacVars %>%
+    filter(mut_position %in% myResidues) %>%
+    ungroup %>%
+    summarise(exacCases=sum(mut_exac_count))
+   
+   regionalStats <- rbind(regionalStats,
+         cbind(region,length,hcmCases,dcmCases,exacCounts)
+   )
+}
+
+  
+nHCM=6112;nDCM=1315;nExac=33364
+myOr = function(caseVarsTarget,contVarsTarget,nCases=nHCM,nControls=nExac){
+  fisher.test(matrix(c(caseVarsTarget,
+                       nCases-caseVarsTarget,
+                       contVarsTarget,
+                       nControls-contVarsTarget),2,2)
+           )$estimate %>%
+    return()
+}
+
+
+
+xtraStats <- regionalStats %>%
+  group_by(region) %>%
+  summarise(hcm_or=myOr(hcmCases,exacCases,nCases=nHCM),
+            dcm_or=myOr(dcmCases,exacCases,nCases=nDCM),
+            hcm_ef=(hcm_or-1)/hcm_or,
+            dcm_ef=(dcm_or-1)/dcm_or
+            )
+  
+### need to reduce to sensible sig fig
+### replace -ve ef values with 0, and NaN with 1
+
+toPlot <- left_join(condensed,
+          left_join(regionalStats,xtraStats),
+          by=c("category"="region")
+)
+
+par(mfrow=c(2,1))
+plot(hcm_ef ~ aaPos, data=toPlot,pch=20,cex=0.1,ylim=c(0,1),xlim=c(1,1935))
+abline(h=0.95,col="blue")
+plot(dcm_ef ~ aaPos, data=toPlot,pch=20,cex=0.1,ylim=c(0,1),xlim=c(1,1935))
+abline(h=0.95,col="blue")
+```
+
+###########
+### Supplementary plot
+```{r suppPlot, include=F}
+png(file="../fig/linearSchematic.png",18,5.5,units="in",res=72)
+par(oma=c(0,3,0,3),
+    mar=c(3,5,1,0))
+
+# ihm
+plot(0,0,type="n",xlim=c(0,2200),ylim=c(0,3),xaxt="n",yaxt="n",ylab="",xlab="",bty="n")
+j=0
+for (i in interactions$interaction %>% unique){
+  myX = interactions %>%
+    filter(interaction==i) %>%
+    select(aaPos) %>%
+    unlist
+  myY = rep(j,length(myX))
+  myCol = interactions %>%
+    filter(interaction==i) %>%
+    select(colour) %>%
+    unlist
+  points(myX,myY,col=myCol,pch=20)
+  mtext(i,side=2,at=j,las=1)
+  j=j+0.1 
+}
+
+j=j+0.2
+# cartoon
+# plot(0,0,type="n",xlim=c(0,1935),ylim=c(0,2.5),xaxt="n",yaxt="n",ylab="",xlab="",bty="n")
+for(i in seq(along=domains$domain)){
+  myX=c(domains[i,2],domains[i,2],domains[i,3],domains[i,3])
+  myY=j+c(0,0.4,0.4,0)
+  polygon(myX,myY,col=domains$colour[i])
+  text(x=(domains[i,2]+domains[i,3])/2,y=j+0.2,domains$domain[i])
+}
+
+j=j+0.6
+# motor
+# plot(0,0,type="n",xlim=c(0,1935),ylim=c(0,1),xaxt="n",yaxt="n",ylab="",xlab="",bty="n")
+for (i in mdFunctional$activity %>% unique){
+  myX = mdFunctional %>%
+    filter(activity==i) %>%
+    select(aaPos) %>%
+    unlist
+  myY = rep(j,length(myX))
+  myCol = mdFunctional %>%
+    filter(activity==i) %>%
+    select(colour) %>%
+    unlist
+  points(myX,myY,col=myCol,pch=20)
+  mtext(i,side=2,at=j,las=1)
+  j=j+0.1 
+  
+}
+
+axis(1,labels=c(1,1935),at=c(1,1935))
+
+myLegend = mdFunctional %>% select(type=activity,colour) %>% unique
+legend(x=1950,y=j,myLegend$type,fill=myLegend$colour,bty="n",yjust=1)
+
+myLegend = interactions %>% select(type,colour) %>% unique
+legend(x=1950,y=0,myLegend$type,fill=myLegend$colour,bty="n",yjust=0)
+
+###
+j = j + 0.2
+myX=hcmMis$aaPos[hcmMis$consensusClass %in% c("4_likelyPath","5_Pathogenic")]
+myY=rep(j,length(myX))
+points(myX,myY,pch="|")
+mtext("HCM",side=2,at=j,las=1)
+
+###
+j = j + 0.2
+myX=dcmMis$aaPos[dcmMis$consensusClass %in% c("4_likelyPath","5_Pathogenic")]
+myY=rep(j,length(myX))
+points(myX,myY,pch="|")
+mtext("DCM",side=2,at=j,las=1)
+dev.off()
+
+```
+
+![Supplementary figure](../fig/linearSchematic.png "linear schematic")
+
+## Extra Tables for internal reference / ensuring numbers quoted in text are correct
+**These are suppressed from markdown output using `include=FALSE`  
+Table of HCM variants with Pathogenic classification by either lab (consensus was used for stats) - to cross-check against Table 1 in manuscript:
+
+```{r, include=FALSE}
+hcmMis[grep("Pathogenic",hcmMis$classification),] %>%
+  arrange(consensusClass,aaPos) %>%
+  ungroup %>%
+  select(-aaPos, -consensusClass) %>%
+  pander
+```
+
+Tabulate the number of **Variants**, **substitutions**, and **residues** for each interaction region to cross check against manuscript:
+
+**HCM Pathogenic**  
+```{r, include=FALSE}
+hcmMis %>%
+  filter(consensusClass=="5_Pathogenic") %>%
+  myTabulator %>% 
+  pander 
+```
+
+**HCM Pathogenic & Likely Pathogenic**  
+```{r, include=FALSE}
+hcmMis %>%
+  filter(consensusClass %in% c("4_likelyPath","5_Pathogenic")) %>%
+  myTabulator %>% 
+  pander 
+```
+
+**HCM all variants**  
+```{r, include=FALSE}
+myTabulator(hcmMis) %>% 
+  pander 
+```
+
+**DCM Pathogenic & Likely Pathogenic**  
+```{r, include=FALSE}
+dcmMis %>%
+  filter(consensusClass %in% c("4_likelyPath","5_Pathogenic")) %>%
+  myTabulator %>% 
+  pander 
+```
+
+**Full HCM variant details**
+```{r, include=FALSE}
+### Variants in HCM
+hcmMis %>%
+  ungroup %>%
+  filter(consensusClass %in% c("4_likelyPath","5_Pathogenic")) %>%
+  separate(consensusClass,into=c("classLabel","class"),sep="_") %>%
+  arrange(desc(class),aaPos) %>%
+  select(Variant_HGVS,Variant_protein,nCases=cases,class) %>%
+  pander
+```
+
+
+```{r}  
+hcmMis %>% ungroup %>%
+  filter(consensusClass %in% "4_likelyPath") %>%
+  left_join(interactions,by="aaPos") %>%
+  left_join(mdFunctional,by="aaPos") %>%
+  separate(consensusClass,into=c("classLabel","class"),sep="_") %>%
+  arrange(desc(class)) %>%
+  mutate(ihmLabel=paste(interaction," (",state,")",sep="")) %>%
+  mutate(mdLabel=paste(activity," (",label.y,")",sep="")) %>%
+# summarise(nResidues=length(unique(aaPos)),
+# nVars=length(unique(Variant_HGVS)),
+# nSubs=length(unique(Variant_protein))
+# )
+  group_by(aaPos) %>%
+  summarise(
+    dnaVariant=paste(unique(Variant_HGVS),collapse=","),
+    aaVariant=paste(unique(Variant_protein),collapse=","),
+    cases=sum(cases),
+    #class,
+    ihm=paste(unique(ihmLabel),collapse=","),
+    ihmType=paste(unique(type),collapse=","),
+    md=paste(unique(mdLabel),collapse=",")
+  ) %>%
+  ungroup %>%
+  # select (-aaPos) %>%
+  (function(x){x[x=="NA (NA)"] <- ""; return(x)}) %>%
+  (function(x){x[x=="NA"] <- ""; return(x)}) %>%
+  write.table(file="../data-out/likelyPath.txt",quote=F,sep="\t",row.names=F)
+```
+
+Counting interactions on the mesa by IHM involvement:
+```{r}
+# In text, would like to report n of mesa variants that are at IHM sites, broken down by FH vs BH, and interaction type.
+hcmMis %>%
+  filter(consensusClass %in% c("4_likelyPath","5_Pathogenic")) %>%
+  filter(aaPos %in% homburgerSurface) %>%
+  select(Variant_HGVS,Variant_protein,aaPos) %>%
+  left_join(
+    select(interactions,aaPos,state,type),
+    by=("aaPos")
+    ) %>%
+  group_by(state,type) %>%
+  summarise(n()) %>%
+  kable
+```
+
+```{r}
+#As before, but now group anchoring & scaffolding together (as overlap +++)
+tmp <- interactions %>%
+  select(aaPos,state,type) %>%
+  mutate(type = recode(interactions$type,
+         anchoring="anchoringAndScaffolding",
+         scaffolding="anchoringAndScaffolding")) %>%
+  unique
+hcmMis %>%
+  filter(consensusClass %in% c("4_likelyPath","5_Pathogenic")) %>%
+  filter(aaPos %in% homburgerSurface) %>%
+  select(Variant_HGVS,Variant_protein,aaPos) %>%
+  left_join(
+    tmp,
+    by=("aaPos")
+    ) %>%
+  group_by(state,type) %>%
+  summarise(n()) %>%
+  kable
+```
+
+```{r}
+hcmMis %>%
+  ungroup %>%
+filter(aaPos %in% homburgerSurface) %>%
+arrange(desc(consensusClass),aaPos) %>%
+  write.table("../data-raw/mesaVariants20161214.txt",quote=F,sep="\t",row.names=F)
+```
+
+## Footnotes
+- Where p-value is returned as 0, this means less than the precision of the computer = $`r format(.Machine)["double.xmin"] %>% as.numeric %>% signif(2)`$ 
