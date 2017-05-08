@@ -1,7 +1,7 @@
 # Effect of Myosin Variants on Interacting-Heads Motif Explain Distinct Hypertrophic and Dilated Cardiomyopathy Phenotypes
-### _Lorenzo Alamo^1^, James S. Ware^1^, Antonio Pinto, Richard E. Gillilan, Jonathan G. Seidman, Christine E. Seidman^1^ and Raúl Padrón^1^_
+### _Lorenzo Alamo\*, James S. Ware\*, Antonio Pinto, Richard E. Gillilan, Jonathan G. Seidman, Christine E. Seidman\* and Raúl Padrón\*_
 
-_^1^ equal contributions_
+_\* equal contributions_
 
 This repository contains code to reproduce analyses presented in the paper above, and to generate the figures.  This code is released under a GPL3 license.
 
